@@ -1,0 +1,888 @@
+DOCKER + KUBERNETES LAB EXAM HANDBOOK
+=====================================
+
+Purpose
+-------
+A practical command and template reference for Docker, Docker Compose, Kubernetes,
+and Minikube. Replace placeholders such as USERNAME, APP_NAME, and image names.
+Check exam rules before using saved files or internet access.
+
+============================================================
+1. DOCKER COMMANDS
+============================================================
+
+1.1 Check installation and system
+----------------------------------
+docker --version
+docker version
+docker info
+docker system df
+docker context ls
+
+1.2 Images
+----------
+docker images
+docker image ls
+docker pull nginx
+docker pull node:22
+docker build -t myapp:1.0 .
+docker tag myapp:1.0 USERNAME/myapp:1.0
+docker login
+docker push USERNAME/myapp:1.0
+docker rmi myapp:1.0
+docker image inspect nginx
+docker image prune
+
+1.3 Containers
+--------------
+docker ps
+docker ps -a
+docker run nginx
+docker run -d --name web -p 8080:80 nginx
+docker run --name test-nginx -p 8081:80 -d nginx
+docker run -it ubuntu bash
+docker stop web
+docker start web
+docker restart web
+docker pause web
+docker unpause web
+docker kill web
+docker rm web
+docker rm -f web
+docker logs web
+docker logs -f web
+docker logs --tail 50 web
+docker inspect web
+docker stats
+docker top web
+docker exec -it web sh
+docker exec -it web bash
+docker cp web:/etc/nginx/nginx.conf .
+docker cp ./file.txt web:/tmp/file.txt
+docker rename web web-new
+docker port web
+
+1.4 Ports
+---------
+docker run -d --name web -p 8080:80 nginx
+# Host port 8080 maps to container port 80.
+# Open http://localhost:8080
+
+1.5 Volumes and bind mounts
+---------------------------
+docker volume ls
+docker volume create appdata
+docker volume inspect appdata
+docker run -d --name db -v appdata:/var/lib/data alpine sleep 3600
+docker run --rm -v appdata:/data alpine ls /data
+docker volume rm appdata
+docker run --rm -v "$PWD":/app -w /app alpine ls
+# On Windows PowerShell, use an appropriate absolute path, e.g.:
+# docker run --rm -v "${PWD}:/app" -w /app alpine ls
+
+1.6 Networks
+------------
+docker network ls
+docker network create app-net
+docker network inspect app-net
+docker run -d --name web --network app-net nginx
+docker network connect app-net CONTAINER_NAME
+docker network disconnect app-net CONTAINER_NAME
+docker network rm app-net
+
+1.7 Cleanup (destructive: review before running)
+------------------------------------------------
+docker container prune
+docker image prune
+docker volume prune
+docker network prune
+docker system prune
+docker system prune -a
+# -a removes all unused images, not just dangling images.
+# Volumes are not removed by ordinary system prune unless requested with options.
+
+1.8 Useful troubleshooting
+-------------------------
+docker logs CONTAINER
+docker inspect CONTAINER
+docker events
+docker system df
+docker ps -a
+docker image ls
+docker network ls
+
+============================================================
+2. DOCKERFILE TEMPLATES
+============================================================
+
+2.1 Node.js application
+-----------------------
+Expected files:
+  server.js
+  package.json
+  Dockerfile
+
+server.js:
+-----------
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('Hello from Docker Node.js!');
+});
+
+server.listen(3000, '0.0.0.0', () => {
+  console.log('Server listening on port 3000');
+});
+
+package.json:
+-------------
+{
+  "name": "docker-node-lab",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}
+
+Dockerfile:
+-----------
+FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --omit=dev
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
+
+Build and run:
+--------------
+docker build -t node-lab:1.0 .
+docker run -d --name node-lab -p 3000:3000 node-lab:1.0
+docker logs node-lab
+# Test http://localhost:3000
+docker stop node-lab
+docker rm node-lab
+
+2.2 Python Flask application
+----------------------------
+app.py:
+-------
+from flask import Flask
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Hello from Docker Flask!"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+requirements.txt:
+-----------------
+flask
+
+Dockerfile:
+-----------
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 5000
+CMD ["python", "app.py"]
+
+Build/run:
+----------
+docker build -t flask-lab:1.0 .
+docker run -d --name flask-lab -p 5000:5000 flask-lab:1.0
+# Test http://localhost:5000
+
+2.3 Static Nginx website
+------------------------
+Files:
+  Dockerfile
+  index.html
+
+Dockerfile:
+-----------
+FROM nginx:alpine
+COPY index.html /usr/share/nginx/html/index.html
+EXPOSE 80
+
+Commands:
+---------
+docker build -t static-site:1.0 .
+docker run -d --name static-site -p 8080:80 static-site:1.0
+# Test http://localhost:8080
+
+2.4 Dockerfile instruction meanings
+-----------------------------------
+FROM       Base image
+WORKDIR    Working directory inside the image
+COPY       Copy files from build context into image
+ADD        Copy files; also supports URL/local archive behavior. Prefer COPY for normal copies.
+RUN        Execute a command while building the image
+ENV        Set environment variable
+ARG        Build-time variable
+EXPOSE     Document the intended listening port; does not publish it
+CMD        Default command/arguments when container starts
+ENTRYPOINT Main executable for the container
+USER       Set runtime user
+VOLUME     Declare a mount point
+HEALTHCHECK Define a health check
+
+2.5 .dockerignore example
+-------------------------
+node_modules
+.git
+.env
+*.log
+.DS_Store
+
+============================================================
+3. DOCKER COMPOSE
+============================================================
+
+3.1 Node app + Redis example
+----------------------------
+docker-compose.yml:
+--------------------
+services:
+  app:
+    build: .
+    container_name: node-app
+    ports:
+      - "3000:3000"
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
+
+Commands:
+---------
+docker compose up
+docker compose up -d
+docker compose up --build -d
+docker compose ps
+docker compose logs
+docker compose logs -f app
+docker compose exec app sh
+docker compose stop
+docker compose start
+docker compose down
+docker compose down -v
+# down -v also removes Compose-managed named volumes; data may be lost.
+
+3.2 Web + database template
+---------------------------
+services:
+  web:
+    build: .
+    ports:
+      - "8080:3000"
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: labdb
+      DB_USER: labuser
+      DB_PASSWORD: change-me-for-local-lab
+    depends_on:
+      - db
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: labdb
+      POSTGRES_USER: labuser
+      POSTGRES_PASSWORD: change-me-for-local-lab
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+volumes:
+  postgres-data:
+
+Note: This is a classroom template, not production secret management. Do not commit real
+credentials. depends_on controls startup order but does not by itself guarantee database readiness.
+
+============================================================
+4. DOCKER HUB WORKFLOW
+============================================================
+
+docker login
+docker build -t USERNAME/myapp:1.0 .
+docker push USERNAME/myapp:1.0
+
+On another machine:
+docker pull USERNAME/myapp:1.0
+docker run -d --name myapp -p 3000:3000 USERNAME/myapp:1.0
+
+To copy a text file from an image:
+Dockerfile:
+  FROM alpine:latest
+  WORKDIR /lab
+  COPY docker_lab_commands.txt .
+  CMD ["cat", "docker_lab_commands.txt"]
+
+Build/push:
+docker build -t USERNAME/lab-reference:1.0 .
+docker push USERNAME/lab-reference:1.0
+
+On lab machine:
+docker pull USERNAME/lab-reference:1.0
+docker run --rm USERNAME/lab-reference:1.0
+
+To copy the file to the host:
+docker create --name temp-lab USERNAME/lab-reference:1.0
+docker cp temp-lab:/lab/docker_lab_commands.txt .
+docker rm temp-lab
+
+============================================================
+5. KUBERNETES / KUBECTL COMMANDS
+============================================================
+
+5.1 Cluster and context
+-----------------------
+kubectl version --client
+kubectl cluster-info
+kubectl get nodes
+kubectl get namespaces
+kubectl config get-contexts
+kubectl config current-context
+kubectl config use-context minikube
+kubectl explain deployment
+kubectl explain deployment.spec
+kubectl api-resources
+
+5.2 Get resources
+-----------------
+kubectl get pods
+kubectl get pods -A
+kubectl get pods -o wide
+kubectl get deployments
+kubectl get services
+kubectl get svc
+kubectl get replicasets
+kubectl get configmaps
+kubectl get secrets
+kubectl get events --sort-by=.metadata.creationTimestamp
+kubectl get all
+kubectl get pods -n NAMESPACE
+
+5.3 Describe, logs, exec
+-----------------------
+kubectl describe pod POD_NAME
+kubectl describe deployment DEPLOYMENT_NAME
+kubectl logs POD_NAME
+kubectl logs -f POD_NAME
+kubectl logs POD_NAME -c CONTAINER_NAME
+kubectl exec -it POD_NAME -- sh
+kubectl exec -it POD_NAME -- bash
+kubectl port-forward service/my-service 8080:80
+
+5.4 Apply, edit, delete, scale
+------------------------------
+kubectl apply -f deployment.yaml
+kubectl apply -f .
+kubectl diff -f deployment.yaml
+kubectl edit deployment my-app
+kubectl scale deployment my-app --replicas=3
+kubectl rollout status deployment/my-app
+kubectl rollout history deployment/my-app
+kubectl rollout undo deployment/my-app
+kubectl delete -f deployment.yaml
+kubectl delete pod POD_NAME
+kubectl delete deployment my-app
+kubectl delete service my-service
+
+5.5 Resource usage (requires Metrics Server)
+--------------------------------------------
+kubectl top nodes
+kubectl top pods
+kubectl top pods -A
+kubectl describe hpa
+
+============================================================
+6. MINIKUBE COMMANDS
+============================================================
+
+minikube version
+minikube start
+minikube start --driver=docker
+minikube status
+minikube stop
+minikube delete
+minikube dashboard
+minikube addons list
+minikube addons enable metrics-server
+minikube image ls
+minikube image load my-app:1.0
+minikube service my-service
+minikube service my-service --url
+minikube ip
+
+Build an image in Minikube's Docker environment (driver/setup dependent):
+minikube docker-env
+# On a compatible shell, evaluate the command printed by `minikube docker-env`.
+# Alternatively build locally and load it:
+docker build -t my-app:1.0 .
+minikube image load my-app:1.0
+
+For a local image in a Deployment, use imagePullPolicy: IfNotPresent or Never as
+appropriate. `Never` only works if the image is already present on every node.
+
+============================================================
+7. KUBERNETES YAML TEMPLATES
+============================================================
+
+7.1 Pod (basic learning example)
+--------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+  labels:
+    app: nginx
+spec:
+  containers:
+    - name: nginx
+      image: nginx:alpine
+      ports:
+        - containerPort: 80
+
+Save as pod.yaml:
+kubectl apply -f pod.yaml
+kubectl get pods
+kubectl describe pod nginx-pod
+kubectl delete -f pod.yaml
+
+7.2 Deployment
+--------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+
+Commands:
+kubectl apply -f deployment.yaml
+kubectl get deployments
+kubectl get pods -l app=web
+kubectl scale deployment web-deployment --replicas=3
+kubectl rollout status deployment/web-deployment
+kubectl delete -f deployment.yaml
+
+7.3 Service (NodePort)
+----------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  type: NodePort
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
+
+Apply:
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl get svc
+minikube service web-service
+
+Service types:
+ClusterIP  Internal cluster access; default
+NodePort   Exposes a port on each node
+LoadBalancer Requests an external load balancer from supported infrastructure
+
+7.4 Combined Deployment + Service (single file)
+------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: NodePort
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
+
+7.5 ConfigMap
+-------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  APP_MODE: "lab"
+  LOG_LEVEL: "info"
+
+Use in a Pod container:
+envFrom:
+  - configMapRef:
+      name: app-config
+
+Commands:
+kubectl apply -f configmap.yaml
+kubectl get configmaps
+kubectl describe configmap app-config
+
+7.6 Secret (example only; base64 is not encryption)
+---------------------------------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+type: Opaque
+stringData:
+  username: labuser
+  password: change-me
+
+Use in a container:
+env:
+  - name: DB_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: app-secret
+        key: username
+
+Commands:
+kubectl apply -f secret.yaml
+kubectl get secrets
+kubectl describe secret app-secret
+# Avoid printing real secret values or committing real credentials.
+
+7.7 PersistentVolumeClaim
+-------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+Mount in a Pod/Deployment container:
+volumeMounts:
+  - name: app-storage
+    mountPath: /data
+volumes:
+  - name: app-storage
+    persistentVolumeClaim:
+      claimName: app-pvc
+
+Commands:
+kubectl apply -f pvc.yaml
+kubectl get pvc
+kubectl describe pvc app-pvc
+
+7.8 Namespace
+-------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lab
+
+Commands:
+kubectl apply -f namespace.yaml
+kubectl get namespaces
+kubectl apply -f deployment.yaml -n lab
+kubectl get pods -n lab
+
+7.9 Liveness and readiness probes
+---------------------------------
+containers:
+  - name: web
+    image: nginx:alpine
+    ports:
+      - containerPort: 80
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 10
+      periodSeconds: 20
+
+Readiness: whether a container should receive Service traffic.
+Liveness: whether Kubernetes should restart a container that fails the check.
+
+7.10 Resource requests and limits
+---------------------------------
+resources:
+  requests:
+    cpu: "100m"
+    memory: "64Mi"
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+
+Requests are used for scheduling; limits cap resource usage.
+
+7.11 Horizontal Pod Autoscaler (HPA)
+------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-deployment
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+Needs resource requests and a functioning Metrics Server for CPU-based autoscaling.
+Commands:
+kubectl apply -f hpa.yaml
+kubectl get hpa
+kubectl describe hpa web-hpa
+kubectl top pods
+
+7.12 Ingress (controller required)
+---------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+spec:
+  rules:
+    - host: lab.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-service
+                port:
+                  number: 80
+
+An Ingress resource alone does not provide an Ingress controller. Enable/install a compatible
+controller (for example, Minikube's ingress addon) and configure hostname resolution if needed.
+
+============================================================
+8. COMMON KUBERNETES WORKFLOWS
+============================================================
+
+8.1 Deploy an app
+-----------------
+1. Build or pull the application image.
+2. Write a Deployment YAML.
+3. Write a Service YAML.
+4. Apply the files.
+5. Check rollout, pods, events and logs.
+6. Expose/test the Service.
+7. Clean up when finished.
+
+Example:
+docker build -t my-app:1.0 .
+minikube image load my-app:1.0
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl rollout status deployment/my-app
+kubectl get pods -o wide
+kubectl get svc
+minikube service my-service
+
+8.2 YAML validation and debugging
+---------------------------------
+kubectl apply --dry-run=client -f deployment.yaml
+kubectl diff -f deployment.yaml
+kubectl describe pod POD_NAME
+kubectl logs POD_NAME
+kubectl get events --sort-by=.metadata.creationTimestamp
+kubectl get pod POD_NAME -o yaml
+
+Common statuses:
+Pending              Scheduling/storage/resource issue; describe pod
+ImagePullBackOff     Wrong image/tag, registry access or imagePullSecret
+CrashLoopBackOff     Application repeatedly exits; inspect logs and command
+ErrImageNeverPull    Image missing on node with imagePullPolicy: Never
+CreateContainerConfigError  Often missing ConfigMap/Secret/key or invalid config
+Running but unreachable  Check Service selector, targetPort, app listen address, network
+
+8.3 Useful selectors and output
+-------------------------------
+kubectl get pods -l app=web
+kubectl get pods -o yaml
+kubectl get deployment web-deployment -o wide
+kubectl describe svc web-service
+kubectl get endpointslices
+kubectl get all -n default
+
+============================================================
+9. KUSTOMIZE (BASIC)
+============================================================
+
+kustomization.yaml:
+-------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+namePrefix: lab-
+
+Commands:
+kubectl kustomize .
+kubectl apply -k .
+kubectl delete -k .
+
+============================================================
+10. COMMANDS FOR WINDOWS POWERSHELL VS LINUX
+============================================================
+
+Most docker and kubectl commands are the same on Windows, Linux and macOS.
+Differences commonly arise in paths, environment variables and shell syntax.
+
+Linux/macOS:
+pwd
+ls -la
+cat file.yaml
+cp source destination
+rm file
+
+Windows PowerShell:
+Get-Location
+Get-ChildItem
+Get-Content file.yaml
+Copy-Item source destination
+Remove-Item file
+
+On Windows, ensure Docker Desktop is running and Kubernetes/Minikube is configured.
+In PowerShell, use `.\` for scripts in the current directory when needed.
+
+============================================================
+11. COMMON EXAM MISTAKES
+============================================================
+
+Docker:
+- `docker build` needs a build context, usually the final dot: `docker build -t app .`
+- Use `-p HOST_PORT:CONTAINER_PORT`, not the reverse.
+- `EXPOSE` documents a port; `-p` publishes it to the host.
+- Use `WORKDIR /app`, not `WORKDIR .`, for a predictable working directory.
+- `COPY . .` copies from the build context; ensure required files are present.
+- `CMD` should be valid JSON-array syntax for exec form, e.g. CMD ["node", "server.js"].
+- The application must listen on `0.0.0.0` inside the container, not only `127.0.0.1`.
+- Ensure package.json has the expected start script.
+- Do not bake real secrets into images.
+- Check whether a container name already exists before reusing it.
+
+Kubernetes:
+- Deployment selector must match the labels in `spec.template.metadata.labels`.
+- Service selector must match the Pod labels exactly.
+- Service `targetPort` must match the application's container port.
+- YAML indentation matters; use spaces, not tabs.
+- `containerPort` does not itself expose a Service externally.
+- A local image must exist on the Minikube node; use `minikube image load`.
+- `imagePullPolicy: Never` fails if the image is absent on the node.
+- A Service only routes to matching, ready Pods.
+- HPA CPU scaling typically requires CPU requests and Metrics Server.
+- An Ingress requires a controller.
+- `kubectl apply -f file.yaml` creates or updates; `kubectl delete -f file.yaml` deletes.
+- Avoid deleting namespaces, persistent volumes or data without checking impact.
+
+============================================================
+12. QUICK EXAM MEMORY SHEET
+============================================================
+
+Docker image lifecycle:
+  pull/build -> images -> run -> ps/logs/exec -> stop -> rm
+  build -> tag -> login -> push
+  pull -> run
+
+Dockerfile order (typical):
+  FROM -> WORKDIR -> COPY dependency files -> RUN install
+  -> COPY source -> EXPOSE -> CMD
+
+Compose:
+  docker compose up -d
+  docker compose ps
+  docker compose logs -f
+  docker compose down
+
+Kubernetes workflow:
+  kubectl apply -f ...
+  kubectl get pods
+  kubectl describe pod ...
+  kubectl logs ...
+  kubectl get svc
+  kubectl rollout status deployment/...
+  kubectl delete -f ...
+
+Kubernetes object purposes:
+  Pod          Runs container(s)
+  Deployment   Manages replicas and rolling updates
+  Service      Stable network endpoint for Pods
+  ConfigMap    Non-sensitive configuration
+  Secret       Sensitive configuration data (protect access; base64 is not encryption)
+  PVC          Requests persistent storage
+  HPA          Scales replicas from metrics
+  Ingress      HTTP/HTTPS routing via an Ingress controller
+  Namespace    Logical resource grouping
+
+END OF HANDBOOK
