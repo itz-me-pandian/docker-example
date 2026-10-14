@@ -1,0 +1,327 @@
+DOCKER + DOCKER COMPOSE — LAB EXAM QUICK RECALL
+================================================
+
+1. BASIC DOCKER COMMANDS
+------------------------
+docker --version
+docker info
+docker images
+docker pull nginx
+docker ps
+docker ps -a
+docker run -d --name web -p 8080:80 nginx
+docker logs web
+docker exec -it web sh
+docker stop web
+docker start web
+docker restart web
+docker rm -f web
+docker rmi nginx
+
+Remember:
+- docker run  = create and start a new container
+- docker start = start an existing stopped container
+- docker exec  = run a command inside a running container
+- -d           = detached/background mode
+- -it          = interactive terminal
+- -p HOST:CONTAINER = publish/map a port
+- EXPOSE in Dockerfile does NOT publish a port; -p does that.
+
+2. BUILD AN IMAGE FROM A DOCKERFILE
+-----------------------------------
+Go to the folder containing Dockerfile:
+docker build -t myapp:v1 .
+docker images
+docker run -d --name myapp-container -p 8080:5000 myapp:v1
+
+The final dot (.) means: use the current folder as the build context.
+
+3. DOCKERFILE TEMPLATE — PYTHON / FLASK
+---------------------------------------
+Create these two files in one folder.
+
+requirements.txt:
+flask
+
+app.py:
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Hello from Flask Docker container!"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
+Dockerfile (file name must be exactly Dockerfile, no extension):
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+EXPOSE 5000
+CMD ["python", "app.py"]
+
+Build and run:
+docker build -t flaskapp .
+docker run -d --name flaskapp-container -p 5000:5000 flaskapp
+Open: http://localhost:5000
+Check: docker ps
+Logs: docker logs flaskapp-container
+Stop: docker stop flaskapp-container
+
+Dockerfile keywords:
+FROM    = base image
+WORKDIR = working directory inside the image
+COPY    = copy files from build context into image
+RUN     = execute during image build
+EXPOSE  = document the container port
+CMD     = default command when container starts
+
+4. DOCKER NETWORK — CONTAINER COMMUNICATION
+-------------------------------------------
+Create a user-defined network:
+docker network create mynet
+
+Run two containers on the same network:
+docker run -dit --name c1 --network mynet alpine sh
+docker run -dit --name c2 --network mynet alpine sh
+
+Test from c2:
+docker exec -it c2 sh
+ping c1
+exit
+
+Inspect and clean up:
+docker network ls
+docker network inspect mynet
+docker rm -f c1 c2
+docker network rm mynet
+
+Remember: containers on the same user-defined Docker network can reach one another by container/service name.
+
+5. DOCKER COMPOSE — BASIC NGINX
+-------------------------------
+Create compose.yaml:
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+
+Run from the folder containing compose.yaml:
+docker compose config
+docker compose up -d
+docker compose ps
+docker compose logs
+docker compose down
+
+Open: http://localhost:8080
+
+6. DOCKER COMPOSE — BUILD YOUR OWN APP
+--------------------------------------
+Folder structure:
+myapp/
+  compose.yaml
+  Dockerfile
+  app.py
+  requirements.txt
+
+compose.yaml:
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+Commands:
+docker compose up -d --build
+docker compose ps
+docker compose logs app
+docker compose down
+
+Compose reminders:
+- services: defines the containers/services.
+- image: uses an existing image.
+- build: builds an image using a Dockerfile.
+- ports: "HOST_PORT:CONTAINER_PORT"
+- environment: sets environment variables.
+- volumes: stores/persists data or mounts files.
+- depends_on: controls startup order; by itself, it does not guarantee readiness.
+- Use spaces for YAML indentation, not tabs.
+- Quote port mappings, e.g. "8080:80".
+
+7. DOCKER COMPOSE — MYSQL WITH PERSISTENT DATA
+----------------------------------------------
+compose.yaml:
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: college
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: app123
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
+
+Commands:
+docker compose up -d
+docker compose ps
+docker compose logs db
+docker compose down
+
+Important:
+- Host connects to MySQL on localhost:3307.
+- Other Compose services connect using hostname db and port 3306.
+- Named volume mysql_data keeps database files when containers are removed.
+- docker compose down -v removes the named volume and its stored data.
+- Credentials here are for a lab demo only.
+
+8. THREE-SERVICE MICROSERVICES SHAPE
+------------------------------------
+Typical flow:
+Browser -> frontend -> backend/API -> database
+
+Compose structure:
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    environment:
+      DB_HOST: db
+      DB_USER: appuser
+      DB_PASSWORD: app123
+      DB_NAME: testdb
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: app123
+    volumes:
+      - dbdata:/var/lib/mysql
+
+volumes:
+  dbdata:
+
+Key idea:
+- Frontend is exposed to the browser through a host port.
+- Backend and database can communicate over the Compose network using service names.
+- Usually, the database does not need a public host port for internal communication.
+- If using MySQL, the backend DB_HOST should be db, not localhost.
+- localhost inside a container means that same container, not another service.
+
+9. HEALTHCHECK / STARTUP READINESS
+----------------------------------
+A healthcheck can be added to a database service:
+healthcheck:
+  test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot123"]
+  interval: 5s
+  timeout: 3s
+  retries: 15
+
+To wait for database health:
+depends_on:
+  db:
+    condition: service_healthy
+
+Remember: depends_on alone orders startup; service_healthy waits for the healthcheck to pass.
+
+10. VOLUMES
+-----------
+Named volume:
+services:
+  db:
+    image: mysql:8.4
+    volumes:
+      - dbdata:/var/lib/mysql
+
+volumes:
+  dbdata:
+
+Useful commands:
+docker volume ls
+docker volume inspect dbdata
+docker compose down       # keeps named volumes by default
+docker compose down -v    # removes Compose-managed named volumes
+
+11. QUICK TROUBLESHOOTING
+-------------------------
+docker ps -a
+docker logs <container-name>
+docker inspect <container-name>
+docker exec -it <container-name> sh
+docker compose config
+docker compose logs
+docker compose up -d --build
+
+Common errors:
+- Port already in use: change host side, e.g. "8081:80".
+- Container exits: check docker logs <name>.
+- App only listens on 127.0.0.1: use 0.0.0.0 inside the container.
+- Frontend cannot reach backend: use backend service name, not localhost.
+- Backend cannot reach DB: use DB_HOST=db in Compose.
+- YAML error: check indentation and colon placement; use spaces, not tabs.
+- File not found during build: run command in the correct folder and check COPY paths.
+- Changes not appearing: rebuild with docker compose up -d --build.
+
+12. EXAM EXECUTION CHECKLIST
+----------------------------
+[ ] Check Docker: docker --version
+[ ] Check files and folder names.
+[ ] Validate Compose YAML: docker compose config
+[ ] Build/start: docker compose up -d --build
+[ ] Show running containers: docker compose ps
+[ ] Test in browser or with curl.
+[ ] Show logs if asked: docker compose logs
+[ ] Clean up if asked: docker compose down
+
+13. LAST-MINUTE DIFFERENCES
+---------------------------
+Dockerfile vs compose.yaml:
+- Dockerfile describes how to build ONE image.
+- compose.yaml describes how multiple services/containers run together.
+
+Image vs container:
+- Image = template/package.
+- Container = running or stopped instance of an image.
+
+RUN vs CMD:
+- RUN executes while building the image.
+- CMD runs when a container starts.
+
+ports vs expose:
+- EXPOSE documents the container port.
+- ports publishes/maps a container port to the host.
+
+image vs build in Compose:
+- image: use a named existing image.
+- build: build from a Dockerfile.
+
+Container port mapping example:
+- "8080:80" means host port 8080 -> container port 80.
+
+Docker Compose commands:
+- docker compose up -d --build
+- docker compose ps
+- docker compose logs
+- docker compose down
