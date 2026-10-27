@@ -22,3 +22,5 @@ kubectl create deployment backend --image=patient-backend --replicas=3 --dry-run
 kubectl create service nodeport frontend-service --tcp=80:80 --node-port=30080 --dry-run=client -o yaml > frontend-service.yaml
 
 kubectl create service clusterip backend-service --tcp=5000:5000 --dry-run=client -o yaml > backend-service.yaml
+
+kubectl autoscale deployment backend --cpu-percent=70 --min=3 --max=6 --dry-run=client -o yaml > hpa.yaml
