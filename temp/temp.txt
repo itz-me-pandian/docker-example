@@ -1,0 +1,24 @@
+Generate Pod YAML
+kubectl run mypod --image=nginx --port=80 --dry-run=client -o yaml > pod.yaml
+
+Generate Deployment YAML
+kubectl create deployment myapp --image=nginx --replicas=3 --dry-run=client -o yaml > deployment.yaml
+
+Generate Service YAML
+ClusterIP:
+kubectl create service clusterip myapp-service --tcp=80:80 --dry-run=client -o yaml > service.yaml
+
+NodePort:
+kubectl create service nodeport myapp-service --tcp=80:80 --node-port=30080 --dry-run=client -o yaml > service.yaml
+
+
+
+
+
+kubectl create deployment frontend --image=nginx --replicas=2 --dry-run=client -o yaml > frontend-deployment.yaml
+
+kubectl create deployment backend --image=patient-backend --replicas=3 --dry-run=client -o yaml > backend-deployment.yaml
+
+kubectl create service nodeport frontend-service --tcp=80:80 --node-port=30080 --dry-run=client -o yaml > frontend-service.yaml
+
+kubectl create service clusterip backend-service --tcp=5000:5000 --dry-run=client -o yaml > backend-service.yaml
